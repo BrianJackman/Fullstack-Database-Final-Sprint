@@ -1,13 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const expressWs = require('express-ws');
 const path = require('path');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
+const User = require('./models/user');
+const Poll = require('./models/poll');
 
-const PORT = 3000;
-//TODO: Update this URI to match your own MongoDB setup
-const MONGO_URI = 'mongodb://localhost:27017/keyin_test';
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/Voting_app_db';
 const app = express();
 expressWs(app);
 
@@ -17,27 +19,51 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 app.use(session({
-    secret: 'voting-app-secret',
+    secret: '89dff0917599446f4353702600e336de241d32493f1b329cad0bc1a6aa6b62c0627a32819a5f202648dc86da24a6668382be66fc185a8b728ab6ef7317075f4d',
     resave: false,
     saveUninitialized: false,
 }));
 let connectedClients = [];
 
-//Note: Not all routes you need are present here, some are missing and you'll need to add them yourself.
+// Middleware to check if user is logged in
+function isAuthenticated(req, res, next) {
+    if (req.session.userId) {
+        return next();
+    }
+    res.redirect('/');
+}
 
+// WebSocket for real-time voting
 app.ws('/ws', (socket, request) => {
     connectedClients.push(socket);
 
     socket.on('message', async (message) => {
         const data = JSON.parse(message);
-        
+        // Handle incoming messages
     });
 
     socket.on('close', async (message) => {
-        
+        // Handle socket close
     });
 });
 
+app.ws('/vote/:id', (ws, req) => {
+    ws.on('message', async (msg) => {
+        const { optionIndex } = JSON.parse(msg);
+        const poll = await Poll.findById(req.params.id);
+        poll.options[optionIndex].votes += 1;
+        await poll.save();
+
+        // Broadcast updated poll to all connected clients
+        expressWs.getWss().clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(JSON.stringify(poll));
+            }
+        });
+    });
+});
+
+// Routes
 app.get('/', async (request, response) => {
     if (request.session.user?.id) {
         return response.redirect('/dashboard');
@@ -47,11 +73,18 @@ app.get('/', async (request, response) => {
 });
 
 app.get('/login', async (request, response) => {
-    
+    response.render('login');
 });
 
 app.post('/login', async (request, response) => {
-    
+    const { username, password } = request.body;
+    const user = await User.findOne({ username });
+    if (user && await user.comparePassword(password)) {
+        request.session.userId = user._id;
+        response.redirect('/dashboard');
+    } else {
+        response.redirect('/login');
+    }
 });
 
 app.get('/signup', async (request, response) => {
@@ -62,18 +95,47 @@ app.get('/signup', async (request, response) => {
     return response.render('signup', { errorMessage: null });
 });
 
-app.get('/dashboard', async (request, response) => {
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+    const user = new User({ username, password });
+    await user.save();
+    req.session.userId = user._id;
+    res.redirect('/dashboard');
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/');
+});
+
+app.get('/dashboard', isAuthenticated, async (request, response) => {
     if (!request.session.user?.id) {
         return response.redirect('/');
     }
 
-    //TODO: Fix the polls, this should contain all polls that are active. I'd recommend taking a look at the
-    //authenticatedIndex template to see how it expects polls to be represented
-    return response.render('index/authenticatedIndex', { polls: [] });
+    const polls = await Poll.find();
+    return response.render('index/authenticatedIndex', { polls });
 });
 
-app.get('/profile', async (request, response) => {
-    
+app.get('/poll/:id', isAuthenticated, async (req, res) => {
+    const poll = await Poll.findById(req.params.id);
+    res.render('poll', { poll });
+});
+
+app.post('/poll', isAuthenticated, async (req, res) => {
+    const { question, options } = req.body;
+    const poll = new Poll({
+        question,
+        options: options.map(option => ({ option })),
+        createdBy: req.session.userId
+    });
+    await poll.save();
+    res.redirect('/dashboard');
+});
+
+app.get('/profile', isAuthenticated, async (request, response) => {
+    const user = await User.findById(request.session.userId);
+    response.render('profile', { user });
 });
 
 app.get('/createPoll', async (request, response) => {
@@ -81,7 +143,7 @@ app.get('/createPoll', async (request, response) => {
         return response.redirect('/');
     }
 
-    return response.render('createPoll')
+    return response.render('createPoll');
 });
 
 // Poll creation
@@ -89,8 +151,12 @@ app.post('/createPoll', async (request, response) => {
     const { question, options } = request.body;
     const formattedOptions = Object.values(options).map((option) => ({ answer: option, votes: 0 }));
 
-    const pollCreationError = onCreateNewPoll(question, formattedOptions);
-    //TODO: If an error occurs, what should we do?
+    const pollCreationError = await onCreateNewPoll(question, formattedOptions);
+    if (pollCreationError) {
+        // Handle error
+    } else {
+        response.redirect('/dashboard');
+    }
 });
 
 mongoose.connect(MONGO_URI)
@@ -106,14 +172,19 @@ mongoose.connect(MONGO_URI)
  */
 async function onCreateNewPoll(question, pollOptions) {
     try {
-        //TODO: Save the new poll to MongoDB
-    }
-    catch (error) {
+        const poll = new Poll({ question, options: pollOptions });
+        await poll.save();
+
+        // Tell all connected sockets that a new poll was added
+        connectedClients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(JSON.stringify(poll));
+            }
+        });
+    } catch (error) {
         console.error(error);
         return "Error creating the poll, please try again";
     }
-
-    //TODO: Tell all connected sockets that a new poll was added
 
     return null;
 }
@@ -129,9 +200,20 @@ async function onCreateNewPoll(question, pollOptions) {
  */
 async function onNewVote(pollId, selectedOption) {
     try {
-        
-    }
-    catch (error) {
+        const poll = await Poll.findById(pollId);
+        const option = poll.options.find(opt => opt.option === selectedOption);
+        if (option) {
+            option.votes += 1;
+            await poll.save();
+
+            // Broadcast updated poll to all connected clients
+            connectedClients.forEach(client => {
+                if (client.readyState === 1) {
+                    client.send(JSON.stringify(poll));
+                }
+            });
+        }
+    } catch (error) {
         console.error('Error updating poll:', error);
     }
 }
