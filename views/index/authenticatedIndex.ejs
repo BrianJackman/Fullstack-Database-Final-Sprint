@@ -2,31 +2,31 @@
 
 <div class="main-content">
     <h1>Active Polls</h1>
-    <!-- This is an example of how you can render the polls on the page, you're welcome to keep it or change it if you wish. This page isn't fully complete though -->
-    <ul id="polls">
-        <% polls.forEach((poll) => { %>
-            <li class="poll-container" id="<%= poll.id %>">
-                <h2><%= poll.question %></h2>
-                <ul class="poll-options">
-                    <% for (let { option, votes } of poll.options) { %>
-                        <li id="<%= poll.id %>_<%= option %>">
-                            <strong><%= option %>:</strong> <%= votes %> votes
-                        </li>
-                    <% } %>
-                </ul>
-                <form class="poll-form button-container" action="/vote/<%= poll.id %>" method="POST">
-                    <% for (let { option } of poll.options) { %>
-                        <button class="action-button vote-button" type="submit" value="<%= option %>" name="poll-option">
-                            Vote for <%= option %>
-                        </button>
-                    <% } %>
-                    <input type="hidden" value="<%= poll.id %>" name="poll-id"/>
-                </form>
-            </li>
-        <% }) %>
-    </ul>
+    <% if (polls.length === 0) { %>
+        <p>No polls available. <a href="/createPoll">Create a new poll</a></p>
+    <% } else { %>
+        <ul id="polls">
+            <% polls.forEach((poll) => { %>
+                <li class="poll-container" id="<%= poll.id %>">
+                    <h2><%= poll.question %></h2>
+                    <ul class="poll-options">
+                        <% for (let { option, votes } of poll.options) { %>
+                            <li id="<%= poll.id %>_<%= option %>">
+                                <strong><%= option %>:</strong> <%= votes %> votes
+                            </li>
+                        <% } %>
+                    </ul>
+                    <form class="poll-form button-container" action="/vote/<%= poll.id %>" method="POST">
+                        <% for (let { option } of poll.options) { %>
+                            <button class="action-button vote-button" type="submit" value="<%= option %>" name="poll-option">
+                                Vote for <%= option %>
+                            </button>
+                        <% } %>
+                        <input type="hidden" value="<%= poll.id %>" name="poll-id"/>
+                    </form>
+                </li>
+            <% }) %>
+        </ul>
+    <% } %>
+    <a href="/createPoll" class="create-poll-button">Create a New Poll</a>
 </div>
-
-<script src="/frontend.js" type="application/javascript"></script>
-</body>
-</html>
