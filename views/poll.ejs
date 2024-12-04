@@ -1,0 +1,42 @@
+<%- include('partials/header') %>
+
+<div class="main-content">
+    <h1><%= poll.question %></h1>
+    <ul class="poll-options">
+        <% poll.options.forEach((option, index) => { %>
+            <li>
+                <strong><%= option.option %>:</strong> <%= option.votes %> votes
+                <button onclick="vote(<%= index %>)">Vote</button>
+            </li>
+        <% }) %>
+    </ul>
+</div>
+
+<script>
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}/vote/<%= poll._id %>`);
+
+    ws.onmessage = (event) => {
+        const updatedPoll = JSON.parse(event.data);
+        document.querySelector('.poll-options').innerHTML = updatedPoll.options.map((option, index) => `
+            <li>
+                <strong>${option.option}:</strong> ${option.votes} votes
+                <button onclick="vote(${index})">Vote</button>
+            </li>
+        `).join('');
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket connection closed');
+    };
+
+    function vote(optionIndex) {
+        ws.send(JSON.stringify({ optionIndex }));
+    }
+</script>
+</body>
+</html>

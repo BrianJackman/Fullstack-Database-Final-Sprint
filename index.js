@@ -65,11 +65,12 @@ app.ws('/vote/:id', (ws, req) => {
 
 // Routes
 app.get('/', async (request, response) => {
-    if (request.session.user?.id) {
-        return response.redirect('/dashboard');
+    if (request.session.userId) {
+        const polls = await Poll.find();
+        return response.render('index/authenticatedIndex', { user: request.session.user, polls });
     }
 
-    response.render('index/unauthenticatedIndex', {});
+    response.render('index/unauthenticatedIndex');
 });
 
 app.get('/login', async (request, response) => {
@@ -81,6 +82,7 @@ app.post('/login', async (request, response) => {
     const user = await User.findOne({ username });
     if (user && await user.comparePassword(password)) {
         request.session.userId = user._id;
+        request.session.user = user;
         response.redirect('/dashboard');
     } else {
         response.redirect('/login');
@@ -88,7 +90,7 @@ app.post('/login', async (request, response) => {
 });
 
 app.get('/signup', async (request, response) => {
-    if (request.session.user?.id) {
+    if (request.session.userId) {
         return response.redirect('/dashboard');
     }
 
@@ -100,6 +102,7 @@ app.post('/register', async (req, res) => {
     const user = new User({ username, password });
     await user.save();
     req.session.userId = user._id;
+    req.session.user = user;
     res.redirect('/dashboard');
 });
 
@@ -109,12 +112,8 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('/dashboard', isAuthenticated, async (request, response) => {
-    if (!request.session.user?.id) {
-        return response.redirect('/');
-    }
-
     const polls = await Poll.find();
-    return response.render('index/authenticatedIndex', { polls });
+    return response.render('index/authenticatedIndex', { user: request.session.user, polls });
 });
 
 app.get('/poll/:id', isAuthenticated, async (req, res) => {
@@ -138,18 +137,15 @@ app.get('/profile', isAuthenticated, async (request, response) => {
     response.render('profile', { user });
 });
 
-app.get('/createPoll', async (request, response) => {
-    if (!request.session.user?.id) {
-        return response.redirect('/');
-    }
-
-    return response.render('createPoll');
+// Route to render the createPoll.ejs file
+app.get('/createPoll', isAuthenticated, (req, res) => {
+    res.render('createPoll');
 });
 
 // Poll creation
-app.post('/createPoll', async (request, response) => {
+app.post('/createPoll', isAuthenticated, async (request, response) => {
     const { question, options } = request.body;
-    const formattedOptions = Object.values(options).map((option) => ({ answer: option, votes: 0 }));
+    const formattedOptions = options.split(',').map(option => ({ option: option.trim(), votes: 0 }));
 
     const pollCreationError = await onCreateNewPoll(question, formattedOptions);
     if (pollCreationError) {
@@ -191,9 +187,6 @@ async function onCreateNewPoll(question, pollOptions) {
 
 /**
  * Handles processing a new vote on a poll
- * 
- * This function isn't necessary and should be removed if it's not used, but it's left as a hint to try and help give
- * an idea of how you might want to handle incoming votes
  * 
  * @param {string} pollId The ID of the poll that was voted on
  * @param {string} selectedOption Which option the user voted for
