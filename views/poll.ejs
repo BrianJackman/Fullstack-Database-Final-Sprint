@@ -2,19 +2,28 @@
 
 <div class="main-content">
     <h1><%= poll.question %></h1>
-    <ul class="poll-options">
-        <% poll.options.forEach((option, index) => { %>
-            <li>
-                <strong><%= option.option %>:</strong> <%= option.votes %> votes
-                <button onclick="vote(<%= index %>)">Vote</button>
-            </li>
-        <% }) %>
-    </ul>
+    <form action="/vote/<%= poll._id %>" method="POST">
+        <ul class="poll-options">
+            <% poll.options.forEach((option, index) => { %>
+                <li>
+                    <label>
+                        <input type="radio" name="pollOption" value="<%= option.option %>" required>
+                        <%= option.option %>
+                    </label>
+                </li>
+            <% }) %>
+        </ul>
+        <button type="submit">Submit Vote</button>
+    </form>
 </div>
 
 <script>
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${wsProtocol}://${window.location.host}/vote/<%= poll._id %>`);
+
+    ws.onopen = () => {
+        console.log('WebSocket connection opened');
+    };
 
     ws.onmessage = (event) => {
         const updatedPoll = JSON.parse(event.data);

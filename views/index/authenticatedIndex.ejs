@@ -7,26 +7,41 @@
     <% } else { %>
         <ul id="polls">
             <% polls.forEach((poll) => { %>
-                <li class="poll-container" id="<%= poll.id %>">
+                <li class="poll-container" id="poll-<%= poll._id %>">
                     <h2><%= poll.question %></h2>
-                    <ul class="poll-options">
-                        <% for (let { option, votes } of poll.options) { %>
-                            <li id="<%= poll.id %>_<%= option %>">
-                                <strong><%= option %>:</strong> <%= votes %> votes
-                            </li>
-                        <% } %>
+                    <ul>
+                        <% poll.options.forEach((option) => { %>
+                            <li><%= option.option %>: <span class="votes"><%= option.votes %></span> votes</li>
+                        <% }) %>
                     </ul>
-                    <form class="poll-form button-container" action="/vote/<%= poll.id %>" method="POST">
-                        <% for (let { option } of poll.options) { %>
-                            <button class="action-button vote-button" type="submit" value="<%= option %>" name="poll-option">
-                                Vote for <%= option %>
-                            </button>
-                        <% } %>
-                        <input type="hidden" value="<%= poll.id %>" name="poll-id"/>
-                    </form>
+                    <a href="/poll/<%= poll._id %>" class="action-button">Vote on this Poll</a>
                 </li>
             <% }) %>
         </ul>
     <% } %>
     <a href="/createPoll" class="create-poll-button">Create a New Poll</a>
 </div>
+
+<script>
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+
+    ws.onmessage = (event) => {
+        const updatedPoll = JSON.parse(event.data);
+        const pollElement = document.getElementById(`poll-${updatedPoll._id}`);
+        if (pollElement) {
+            const votesElements = pollElement.querySelectorAll('.votes');
+            updatedPoll.options.forEach((option, index) => {
+                votesElements[index].textContent = option.votes;
+            });
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket connection closed');
+    };
+</script>

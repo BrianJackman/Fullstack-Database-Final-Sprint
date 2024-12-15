@@ -9,7 +9,7 @@ const Poll = require('./models/poll');
 
 const PORT = 3000; // Set your desired port number
 const MONGO_URI = 'mongodb://localhost:27017/Voting_app_db'; // Set your MongoDB URI
-const SESSION_SECRET = '89dff0917599446f4353702600e336de241d32493f1b329cad0bc1a6aa6b62c0627a32819a5f202648dc86da24a6668382be66fc185a8b728ab6ef7317075f4d'; // Set your session secret
+const SESSION_SECRET = '89dff0917599446f4353702600e336ded32493f1b329cad0bc1a6aa6b62c0627a32819a5f202648dc86da24a6668382be66fc185a8b728ab6ef7317075f4d'; // Set your session secret
 
 const app = express();
 const wsInstance = expressWs(app); // Initialize express-ws and get the WebSocket server instance
@@ -44,13 +44,16 @@ function isAuthenticated(req, res, next) {
 // WebSocket for real-time voting
 app.ws('/ws', (socket, request) => {
     connectedClients.push(socket);
+    console.log('New WebSocket connection established');
 
     socket.on('message', async (message) => {
         const data = JSON.parse(message);
+        console.log('Received message:', data);
         // Handle incoming messages
     });
 
     socket.on('close', async (message) => {
+        console.log('WebSocket connection closed');
         // Handle socket close
     });
 });
@@ -62,12 +65,18 @@ app.ws('/vote/:id', (ws, req) => {
         poll.options[optionIndex].votes += 1;
         await poll.save();
 
+        console.log(`Vote received for poll ${req.params.id}, option ${optionIndex}`);
+
         // Broadcast updated poll to all connected clients
         wsInstance.getWss().clients.forEach(client => {
             if (client.readyState === 1) {
                 client.send(JSON.stringify(poll));
             }
         });
+    });
+
+    ws.on('close', () => {
+        console.log(`WebSocket connection closed for poll ${req.params.id}`);
     });
 });
 
@@ -103,6 +112,15 @@ app.get('/signup', async (request, response) => {
     }
 
     return response.render('signup', { errorMessage: null });
+});
+
+app.post('/signup', async (req, res) => {
+    const { username, password } = req.body;
+    const user = new User({ username, password });
+    await user.save();
+    req.session.userId = user._id;
+    req.session.user = user; // Set user in session
+    res.redirect('/dashboard');
 });
 
 app.get('/register', async (request, response) => {
@@ -171,10 +189,27 @@ app.post('/createPoll', isAuthenticated, async (request, response) => {
 app.post('/vote/:id', isAuthenticated, async (req, res) => {
     const { pollOption } = req.body;
     const poll = await Poll.findById(req.params.id);
+    const user = await User.findById(req.session.userId);
+
+    // Check if the user has already voted on this poll
+    if (user.votedPolls.includes(poll._id)) {
+        console.log(`User ${user.username} has already voted on poll ${poll._id}`);
+        return res.redirect(`/poll/${req.params.id}`);
+    }
+
     const option = poll.options.find(opt => opt.option === pollOption);
     if (option) {
         option.votes += 1;
         await poll.save();
+
+        // Increment the pollsVoted field for the user and add the poll to votedPolls
+        user.pollsVoted += 1;
+        user.votedPolls.push(poll._id);
+        await user.save();
+
+        console.log(`User ${user.username} voted on poll ${poll._id}`);
+        console.log(`Polls Voted In: ${user.pollsVoted}`);
+        console.log(`Voted Polls: ${user.votedPolls}`);
 
         // Broadcast updated poll to all connected clients
         wsInstance.getWss().clients.forEach(client => {

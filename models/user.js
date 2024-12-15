@@ -4,7 +4,8 @@ const bcrypt = require('bcrypt');
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    pollsVoted: { type: Number, default: 0 }
+    pollsVoted: { type: Number, default: 0 }, // Field to track the number of polls voted on
+    votedPolls: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Poll' }] // Field to store the IDs of the polls voted on
 });
 
 userSchema.pre('save', async function(next) {
