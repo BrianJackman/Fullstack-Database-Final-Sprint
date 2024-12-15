@@ -82,16 +82,17 @@ app.ws('/vote/:id', (ws, req) => {
 
 // Routes
 app.get('/', async (request, response) => {
+    const pollCount = await Poll.countDocuments();
     if (request.session.userId) {
         const polls = await Poll.find();
         return response.render('index/authenticatedIndex', { user: request.session.user, polls });
     }
 
-    response.render('index/unauthenticatedIndex');
+    response.render('index/unauthenticatedIndex', { pollCount });
 });
 
 app.get('/login', async (request, response) => {
-    response.render('login');
+    response.render('login', { errorMessage: null });
 });
 
 app.post('/login', async (request, response) => {
@@ -102,7 +103,7 @@ app.post('/login', async (request, response) => {
         request.session.user = user; // Set user in session
         response.redirect('/dashboard');
     } else {
-        response.redirect('/login');
+        response.render('login', { errorMessage: 'Incorrect username or password' });
     }
 });
 
@@ -116,6 +117,10 @@ app.get('/signup', async (request, response) => {
 
 app.post('/signup', async (req, res) => {
     const { username, password } = req.body;
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+        return res.render('signup', { errorMessage: 'Username already exists' });
+    }
     const user = new User({ username, password });
     await user.save();
     req.session.userId = user._id;
@@ -148,7 +153,7 @@ app.get('/dashboard', isAuthenticated, async (request, response) => {
 
 app.get('/poll/:id', isAuthenticated, async (req, res) => {
     const poll = await Poll.findById(req.params.id);
-    res.render('poll', { poll });
+    res.render('poll', { poll, errorMessage: null });
 });
 
 app.post('/poll', isAuthenticated, async (req, res) => {
@@ -194,7 +199,7 @@ app.post('/vote/:id', isAuthenticated, async (req, res) => {
     // Check if the user has already voted on this poll
     if (user.votedPolls.includes(poll._id)) {
         console.log(`User ${user.username} has already voted on poll ${poll._id}`);
-        return res.redirect(`/poll/${req.params.id}`);
+        return res.render('poll', { poll, errorMessage: 'You have already voted on this poll' });
     }
 
     const option = poll.options.find(opt => opt.option === pollOption);

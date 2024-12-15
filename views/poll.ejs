@@ -2,6 +2,9 @@
 
 <div class="main-content">
     <h1><%= poll.question %></h1>
+    <% if (errorMessage) { %>
+        <p class="error-message"><%= errorMessage %></p>
+    <% } %>
     <form action="/vote/<%= poll._id %>" method="POST">
         <ul class="poll-options">
             <% poll.options.forEach((option, index) => { %>
