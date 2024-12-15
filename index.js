@@ -1,3 +1,9 @@
+/**
+ * Fullstack/Database Final Sprint
+ * By: Brian Jackman
+ * 2024/12/15
+ */
+
 const express = require('express');
 const expressWs = require('express-ws');
 const path = require('path');
